@@ -1,7 +1,9 @@
+// src/main/java/com/entreprise/manage/core/model/Utilisateur.java
 package com.entreprise.manage.core.auth.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Set;
 
 @Entity
@@ -12,7 +14,7 @@ public class Utilisateur {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "nom_utilisateur", nullable = false, unique = true)
+    @Column(name = "nom_utilisateur", unique = true, nullable = false)
     private String nomUtilisateur;
 
     @Column(name = "mot_de_passe", nullable = false)
@@ -21,21 +23,17 @@ public class Utilisateur {
     @Column(name = "nom_complet")
     private String nomComplet;
 
+    @Column(name = "actif")
     private Boolean actif = true;
 
     @Column(name = "date_creation")
     private LocalDateTime dateCreation;
 
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "utilisateur_role", joinColumns = @JoinColumn(name = "utilisateur_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
-    private Set<Role> roles;
+    private Set<Role> roles = new HashSet<>();
 
-    @PrePersist
-    public void prePersist() {
-        this.dateCreation = LocalDateTime.now();
-    }
-
-    // Getters / Setters
+    // Getters et Setters
     public Long getId() {
         return id;
     }

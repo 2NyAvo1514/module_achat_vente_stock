@@ -1,85 +1,37 @@
 package com.entreprise.manage.achats.service;
 
+// src/main/java/com/entreprise/manage/achats/commandes/service/BonCommandeService.java
+
 import com.entreprise.manage.achats.model.BonCommande;
 import com.entreprise.manage.achats.model.LigneBonCommande;
-import com.entreprise.manage.achats.repository.BonCommandeRepository;
 import com.entreprise.manage.achats.model.DemandeAchat;
+import com.entreprise.manage.core.exception.BusinessException;
 import com.entreprise.manage.core.auth.model.Utilisateur;
-import com.entreprise.manage.referentiels.model.Fournisseur;
-import jakarta.persistence.EntityNotFoundException;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+public interface BonCommandeService {
 
-@Service
-@Transactional
-public class BonCommandeService {
+    BonCommande creerBonCommande(BonCommande bonCommande, Utilisateur acheteur);
 
-    private final BonCommandeRepository bonCommandeRepository;
+    BonCommande creerBonCommandeFromDemande(DemandeAchat demandeAchat, Utilisateur acheteur) throws BusinessException;
 
-    public BonCommandeService(BonCommandeRepository bonCommandeRepository) {
-        this.bonCommandeRepository = bonCommandeRepository;
-    }
+    BonCommande ajouterLigneBonCommande(Long bonCommandeId, LigneBonCommande ligne);
 
-    // -----------------------------
-    // CREATION DEPUIS DA
-    // -----------------------------
+    BonCommande validerBonCommande(Long bonCommandeId, Utilisateur validateur) throws BusinessException;
 
-    public BonCommande creerDepuisDemande(DemandeAchat da, Fournisseur fournisseur, Utilisateur createur) {
+    BonCommande annulerBonCommande(Long bonCommandeId, Utilisateur annulateur, String motif) throws BusinessException;
 
-        if (!da.getStatut().equals("VALIDEE")) {
-            throw new IllegalStateException("La DA doit être validée avant conversion en BC.");
-        }
+    BonCommande getBonCommandeById(Long id);
 
-        BonCommande bc = new BonCommande();
-        bc.setDemandeAchat(da);
-        bc.setFournisseur(fournisseur);
-        bc.setStatut("BROUILLON");
-        bc.setReference("BC-" + System.currentTimeMillis());
+    Page<BonCommande> getAllBonCommandes(Pageable pageable);
 
-        da.getLignes().forEach(ligneDA -> {
-            LigneBonCommande ligneBC = new LigneBonCommande();
-            ligneBC.setBonCommande(bc);
-            ligneBC.setArticle(ligneDA.getArticle());
-            ligneBC.setQuantite(ligneDA.getQuantite());
-            ligneBC.setPrixUnitaire(ligneDA.getPrixUnitaire());
-            bc.getLignes().add(ligneBC);
-        });
+    Page<BonCommande> getBonCommandesByStatut(String statut, Pageable pageable);
 
-        bc.recalculerTotal();
-        return bonCommandeRepository.save(bc);
-    }
+    List<BonCommande> getBonCommandesEnCours();
 
-    // -----------------------------
-    // VALIDATION
-    // -----------------------------
+    BonCommande genererReference(BonCommande bonCommande);
 
-    public BonCommande valider(Long bcId, Utilisateur valideur) {
-        BonCommande bc = getById(bcId);
-
-        if (!bc.getStatut().equals("BROUILLON")) {
-            throw new IllegalStateException("Seuls les BC en brouillon peuvent être validés.");
-        }
-
-        bc.setStatut("VALIDE");
-        bc.setValidePar(valideur);
-        bc.setDateValidation(java.time.LocalDateTime.now());
-
-        return bonCommandeRepository.save(bc);
-    }
-
-    // -----------------------------
-    // UTILITAIRE
-    // -----------------------------
-
-    public BonCommande getById(Long id) {
-        return bonCommandeRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Bon de commande introuvable"));
-    }
-
-    public List<BonCommande> findAll() {
-        return bonCommandeRepository.findAll();
-    }
+    void verifierSeparationTaches(BonCommande bonCommande, Utilisateur validateur) throws BusinessException;
 }

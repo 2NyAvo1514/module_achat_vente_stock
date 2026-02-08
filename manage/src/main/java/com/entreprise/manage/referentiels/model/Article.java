@@ -1,6 +1,7 @@
 package com.entreprise.manage.referentiels.model;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "article")
@@ -31,6 +32,12 @@ public class Article {
     private Integer dureeConservationJours;
 
     private Boolean actif = true;
+
+    @Column(name = "stock_minimum", precision = 15, scale = 2)
+    private BigDecimal stockMinimum;
+
+    @Column(name = "stock_maximum", precision = 15, scale = 2)
+    private BigDecimal stockMaximum;
 
     // Getters / Setters
     public Long getId() {
@@ -95,5 +102,21 @@ public class Article {
 
     public void setActif(Boolean actif) {
         this.actif = actif;
+    }
+
+    public BigDecimal getStockMinimum() {
+        return stockMinimum;
+    }
+
+    public void setStockMinimum(BigDecimal stockMinimum) {
+        this.stockMinimum = stockMinimum;
+    }
+
+    public BigDecimal getStockMaximum() {
+        return stockMaximum;
+    }
+
+    public void setStockMaximum(BigDecimal stockMaximum) {
+        this.stockMaximum = stockMaximum;
     }
 }

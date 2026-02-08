@@ -1,24 +1,38 @@
 package com.entreprise.manage.achats.service;
 
-import com.entreprise.manage.achats.dto.DemandeAchatForm;
+// src/main/java/com/entreprise/manage/achats/demande-achat/service/DemandeAchatService.java
+
 import com.entreprise.manage.achats.model.DemandeAchat;
+import com.entreprise.manage.achats.model.LigneDemandeAchat;
+import com.entreprise.manage.core.exception.BusinessException;
+import com.entreprise.manage.core.auth.model.Utilisateur;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 public interface DemandeAchatService {
-    DemandeAchat creerBrouillon(DemandeAchatForm form);
 
-    DemandeAchat creerEtSoumettre(DemandeAchatForm form);
+    DemandeAchat creerDemandeAchat(DemandeAchat demandeAchat, Utilisateur demandeur);
 
-    void valider(Long id);
+    DemandeAchat ajouterLigneDemande(Long demandeId, LigneDemandeAchat ligne);
 
-    List<DemandeAchat> listerToutes();
+    DemandeAchat soumettreDemande(Long demandeId, Utilisateur validateur) throws BusinessException;
 
-    DemandeAchat trouverParId(Long id);
+    DemandeAchat validerDemande(Long demandeId, Utilisateur validateur) throws BusinessException;
 
-    // -------------------------
-    // Méthode manquante
-    // -------------------------
-    default DemandeAchat getById(Long id) {
-        return trouverParId(id); // simple alias
-    }
+    DemandeAchat rejeterDemande(Long demandeId, Utilisateur validateur, String motif) throws BusinessException;
+
+    DemandeAchat getDemandeById(Long id);
+
+    Page<DemandeAchat> getAllDemandes(Pageable pageable);
+
+    Page<DemandeAchat> getDemandesByStatut(String statut, Pageable pageable);
+
+    Page<DemandeAchat> getDemandesByDemandeur(Utilisateur demandeur, Pageable pageable);
+
+    List<DemandeAchat> getDemandesEnAttenteValidation();
+
+    void supprimerDemande(Long id) throws BusinessException;
+
+    DemandeAchat genererReference(DemandeAchat demande);
 }

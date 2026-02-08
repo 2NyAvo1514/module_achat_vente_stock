@@ -1,134 +1,183 @@
+// src/main/java/com/entreprise/manage/achats/demande-achat/service/impl/DemandeAchatServiceImpl.java
 package com.entreprise.manage.achats.service.impl;
 
-import com.entreprise.manage.achats.dto.DemandeAchatForm;
-import com.entreprise.manage.achats.model.*;
+import com.entreprise.manage.achats.model.DemandeAchat;
+import com.entreprise.manage.achats.model.LigneDemandeAchat;
 import com.entreprise.manage.achats.repository.DemandeAchatRepository;
 import com.entreprise.manage.achats.service.DemandeAchatService;
-import com.entreprise.manage.referentiels.model.Article;
-import com.entreprise.manage.referentiels.model.Site;
-import com.entreprise.manage.referentiels.repository.ArticleRepository;
-import com.entreprise.manage.referentiels.repository.SiteRepository;
+import com.entreprise.manage.core.auth.SecurityUtil;
+import com.entreprise.manage.core.exception.BusinessException;
 import com.entreprise.manage.core.auth.model.Utilisateur;
-import com.entreprise.manage.core.auth.repository.UtilisateurRepository;
-import com.entreprise.manage.achats.enums.StatutDemandeAchat;
-import jakarta.transaction.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional
 public class DemandeAchatServiceImpl implements DemandeAchatService {
 
-    private final DemandeAchatRepository demandeRepo;
-    private final ArticleRepository articleRepo;
-    private final SiteRepository siteRepo;
-    private final UtilisateurRepository utilisateurRepo;
+    private final DemandeAchatRepository demandeAchatRepository;
+    private final SecurityUtil securityUtil;
 
-    public DemandeAchatServiceImpl(DemandeAchatRepository demandeRepo,
-            ArticleRepository articleRepo,
-            SiteRepository siteRepo,
-            UtilisateurRepository utilisateurRepo) {
-        this.demandeRepo = demandeRepo;
-        this.articleRepo = articleRepo;
-        this.siteRepo = siteRepo;
-        this.utilisateurRepo = utilisateurRepo;
+    public DemandeAchatServiceImpl(DemandeAchatRepository demandeAchatRepository,
+            SecurityUtil securityUtil) {
+        this.demandeAchatRepository = demandeAchatRepository;
+        this.securityUtil = securityUtil;
     }
 
     @Override
-    public DemandeAchat creerBrouillon(DemandeAchatForm form) {
-        return creer(form, false);
+    public DemandeAchat creerDemandeAchat(DemandeAchat demandeAchat, Utilisateur demandeur) {
+        demandeAchat.setDemandeur(demandeur);
+        demandeAchat.setStatut("BROUILLON");
+        demandeAchat.setDateCreation(LocalDateTime.now());
+
+        // Générer référence
+        demandeAchat = genererReference(demandeAchat);
+
+        // Calculer montant total
+        // demandeAchat.calculerMontantTotal();
+
+        return demandeAchatRepository.save(demandeAchat);
     }
 
     @Override
-    public DemandeAchat creerEtSoumettre(DemandeAchatForm form) {
-        return creer(form, true);
-    }
+    public DemandeAchat ajouterLigneDemande(Long demandeId, LigneDemandeAchat ligne) {
+        DemandeAchat demande = getDemandeById(demandeId);
 
-    private DemandeAchat creer(DemandeAchatForm form, boolean soumettre) {
-
-        if (form.getLignes().isEmpty()) {
-            throw new IllegalStateException("La demande doit contenir au moins une ligne.");
+        if (!"BROUILLON".equals(demande.getStatut())) {
+            throw new BusinessException("Impossible d'ajouter une ligne à une demande " + demande.getStatut());
         }
 
-        Site site = siteRepo.findById(form.getSiteId())
-                .orElseThrow(() -> new IllegalStateException("Site introuvable"));
+        ligne.setDemandeAchat(demande);
+        ligne.calculerTotal();
+        demande.getLignes().add(ligne);
+        // demande.calculerMontantTotal();
 
-        Utilisateur demandeur = utilisateurRepo.utilisateurCourant();
+        return demandeAchatRepository.save(demande);
+    }
 
-        DemandeAchat da = new DemandeAchat();
-        da.setReference(genererReference());
-        da.setSite(site);
-        da.setDemandeur(demandeur);
-        da.setDateCreation(LocalDateTime.now());
-        da.setStatut(soumettre ? "SOUMISE" : "BROUILLON");
+    @Override
+    public DemandeAchat soumettreDemande(Long demandeId, Utilisateur validateur) throws BusinessException {
+        DemandeAchat demande = getDemandeById(demandeId);
 
-        BigDecimal total = BigDecimal.ZERO;
-
-        for (var l : form.getLignes()) {
-            Article article = articleRepo.findById(l.getArticleId())
-                    .orElseThrow(() -> new IllegalStateException("Article introuvable"));
-
-            if (l.getQuantite().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalStateException("Quantité invalide pour " + article.getLibelle());
-            }
-
-            LigneDemandeAchat ligne = new LigneDemandeAchat();
-            ligne.setArticle(article);
-            ligne.setQuantite(l.getQuantite());
-            ligne.setPrixUnitaire(l.getPrixUnitaire());
-            ligne.setTotalLigne(l.getQuantite().multiply(l.getPrixUnitaire()));
-            ligne.setDemandeAchat(da);
-
-            da.getLignes().add(ligne);
-            total = total.add(ligne.getTotalLigne());
+        // Vérifier que c'est le demandeur qui soumet
+        if (!demande.getDemandeur().getId().equals(validateur.getId())) {
+            throw new BusinessException("Seul le demandeur peut soumettre la demande");
         }
 
-        da.setMontantTotal(total);
-        return demandeRepo.save(da);
-    }
-
-    @Override
-    public void valider(Long id) {
-        DemandeAchat da = trouverParId(id);
-
-        Utilisateur valideur = utilisateurRepo.utilisateurCourant();
-
-        if (da.getDemandeur().getId().equals(valideur.getId())) {
-            throw new IllegalStateException("Vous ne pouvez pas valider votre propre demande.");
+        // Vérifier qu'il y a des lignes
+        if (demande.getLignes().isEmpty()) {
+            throw new BusinessException("La demande doit contenir au moins une ligne");
         }
 
-        if (!da.getStatut().equals("SOUMISE")) {
-            throw new IllegalStateException("Seule une demande soumise peut être validée.");
+        // Vérifier montant minimum
+        // if (demande.getMontantTotal() == null || demande.getMontantTotal() <= 0) {
+        //     throw new BusinessException("Le montant total doit être positif");
+        // }
+
+        demande.setStatut("SOUMISE");
+        demande.setDateCreation(LocalDateTime.now());
+
+        return demandeAchatRepository.save(demande);
+    }
+
+    @Override
+    public DemandeAchat validerDemande(Long demandeId, Utilisateur validateur) throws BusinessException {
+        DemandeAchat demande = getDemandeById(demandeId);
+
+        // Vérifier statut
+        if (!"SOUMISE".equals(demande.getStatut())) {
+            throw new BusinessException("Seules les demandes SOUMISES peuvent être validées");
         }
 
-        da.setStatut("VALIDEE");
-        da.setDateValidation(LocalDateTime.now());
-        da.setValidePar(valideur);
-        demandeRepo.save(da);
+        // Vérifier séparation des tâches (le validateur ne peut pas être le demandeur)
+        if (demande.getDemandeur().getId().equals(validateur.getId())) {
+            throw new BusinessException("Le validateur ne peut pas être le même que le demandeur");
+        }
+
+        // Appliquer les règles de validation selon les seuils
+        // if (!peutValiderSelonSeuil(demande, validateur)) {
+        //     throw new BusinessException("Vous n'avez pas les droits pour valider cette demande (seuil insuffisant)");
+        // }
+
+        demande.setStatut("VALIDEE");
+        demande.setDateValidation(LocalDateTime.now());
+        demande.setValidePar(validateur);
+
+        return demandeAchatRepository.save(demande);
     }
 
     @Override
-    public List<DemandeAchat> listerToutes() {
-        return demandeRepo.findAll();
+    public DemandeAchat rejeterDemande(Long demandeId, Utilisateur validateur, String motif) throws BusinessException {
+        DemandeAchat demande = getDemandeById(demandeId);
+
+        if (!"SOUMISE".equals(demande.getStatut())) {
+            throw new BusinessException("Seules les demandes SOUMISES peuvent être rejetées");
+        }
+
+        demande.setStatut("REJETEE");
+        demande.setDateValidation(LocalDateTime.now());
+        demande.setValidePar(validateur);
+
+        return demandeAchatRepository.save(demande);
     }
 
     @Override
-    public DemandeAchat trouverParId(Long id) {
-        return demandeRepo.findById(id)
-                .orElseThrow(() -> new IllegalStateException("Demande introuvable"));
+    public DemandeAchat getDemandeById(Long id) {
+        return demandeAchatRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("Demande d'achat non trouvée avec l'ID: " + id));
     }
 
-    private String genererReference() {
-        return "DA-" + System.currentTimeMillis();
-    }
-    
     @Override
-    public DemandeAchat getById(Long id) {
-        return demandeRepo.findById(id)
-                .orElseThrow(() -> new IllegalStateException("Demande introuvable pour id=" + id));
+    public Page<DemandeAchat> getAllDemandes(Pageable pageable) {
+        return demandeAchatRepository.findAll(pageable);
     }
 
+    @Override
+    public Page<DemandeAchat> getDemandesByStatut(String statut, Pageable pageable) {
+        return (Page<DemandeAchat>) demandeAchatRepository.findByStatut(statut);
+    }
+
+    @Override
+    public Page<DemandeAchat> getDemandesByDemandeur(Utilisateur demandeur, Pageable pageable) {
+        return demandeAchatRepository.findByDemandeur(demandeur, pageable);
+    }
+
+    @Override
+    public List<DemandeAchat> getDemandesEnAttenteValidation() {
+        return demandeAchatRepository.findByStatut("SOUMISE");
+    }
+
+    @Override
+    public void supprimerDemande(Long id) throws BusinessException {
+        DemandeAchat demande = getDemandeById(id);
+
+        if (!"BROUILLON".equals(demande.getStatut())) {
+            throw new BusinessException("Seules les demandes en BROUILLON peuvent être supprimées");
+        }
+
+        demandeAchatRepository.delete(demande);
+    }
+
+    @Override
+    public DemandeAchat genererReference(DemandeAchat demande) {
+        String annee = String.valueOf(LocalDateTime.now().getYear());
+        String uuid = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String reference = "DA-" + annee + "-" + uuid;
+        demande.setReference(reference);
+        return demande;
+    }
+
+    // private boolean peutValiderSelonSeuil(DemandeAchat demande, Utilisateur validateur) {
+    //     Double montant = demande.getMontantTotal();
+
+    //     // Règles de seuil selon le rôle
+    //     // TODO: Implémenter la logique des seuils N1/N2/N3
+    //     // Pour l'instant, on suppose que tous les validateurs peuvent valider
+    //     return true;
+    // }
 }

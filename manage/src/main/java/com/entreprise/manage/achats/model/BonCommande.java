@@ -1,14 +1,15 @@
+// src/main/java/com/entreprise/manage/achats/commandes/model/BonCommande.java
 package com.entreprise.manage.achats.model;
 
-// import com.entreprise.manage.achats.model.DemandeAchat;
-import com.entreprise.manage.core.auth.model.Utilisateur;
+import com.entreprise.manage.achats.model.DemandeAchat;
 import com.entreprise.manage.referentiels.model.Fournisseur;
+import com.entreprise.manage.core.auth.model.Utilisateur;
 import jakarta.persistence.*;
-
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Entity
 @Table(name = "bon_commande")
@@ -18,22 +19,22 @@ public class BonCommande {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "reference", unique = true, nullable = false)
     private String reference;
 
-    @ManyToOne
+    @OneToOne
     @JoinColumn(name = "demande_achat_id")
     private DemandeAchat demandeAchat;
 
     @ManyToOne
-    @JoinColumn(name = "fournisseur_id")
+    @JoinColumn(name = "fournisseur_id", nullable = false)
     private Fournisseur fournisseur;
 
-    @Column(nullable = false)
-    private String statut; // BROUILLON, VALIDE, ENVOYE, RECU, CLOTURE
+    @Column(name = "statut", nullable = false)
+    private String statut; // BROUILLON, EN_COURS, VALIDEE, ANNULEE, LIVREE
 
     @Column(name = "montant_total", precision = 15, scale = 2)
-    private BigDecimal montantTotal;
+    private BigDecimal montantTotal = BigDecimal.ZERO;
 
     @Column(name = "date_creation")
     private LocalDateTime dateCreation;
@@ -45,24 +46,10 @@ public class BonCommande {
     @JoinColumn(name = "valide_par")
     private Utilisateur validePar;
 
-    @Version
-    private Long version;
-
-    @OneToMany(mappedBy = "bonCommande", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "bonCommande", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<LigneBonCommande> lignes = new ArrayList<>();
 
-    @PrePersist
-    public void prePersist() {
-        this.dateCreation = LocalDateTime.now();
-    }
-
-    public void recalculerTotal() {
-        this.montantTotal = lignes.stream()
-                .map(LigneBonCommande::getTotalLigne)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    // Getters / Setters
+    // Getters et Setters
     public Long getId() {
         return id;
     }
@@ -103,14 +90,6 @@ public class BonCommande {
         this.statut = statut;
     }
 
-    public BigDecimal getMontantTotal() {
-        return montantTotal;
-    }
-
-    public void setMontantTotal(BigDecimal montantTotal) {
-        this.montantTotal = montantTotal;
-    }
-
     public LocalDateTime getDateCreation() {
         return dateCreation;
     }
@@ -135,14 +114,6 @@ public class BonCommande {
         this.validePar = validePar;
     }
 
-    public Long getVersion() {
-        return version;
-    }
-
-    public void setVersion(Long version) {
-        this.version = version;
-    }
-
     public List<LigneBonCommande> getLignes() {
         return lignes;
     }
@@ -150,4 +121,25 @@ public class BonCommande {
     public void setLignes(List<LigneBonCommande> lignes) {
         this.lignes = lignes;
     }
+
+    public BigDecimal getMontantTotal() {
+        return montantTotal;
+    }
+
+    public void setMontantTotal(BigDecimal montantTotal) {
+        this.montantTotal = montantTotal;
+    }
+
+    public void calculerMontantTotal() {
+        if (this.lignes == null || this.lignes.isEmpty()) {
+            this.montantTotal = BigDecimal.ZERO;
+            return;
+        }
+        this.montantTotal = this.lignes.stream()
+                .map(LigneBonCommande::getTotalLigne)
+                .filter(t -> t != null)
+                .reduce(BigDecimal.ZERO, (a, b) -> a.add(b))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
 }

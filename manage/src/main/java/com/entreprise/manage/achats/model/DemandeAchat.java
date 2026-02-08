@@ -1,10 +1,13 @@
+// src/main/java/com/entreprise/manage/achats/demande-achat/model/DemandeAchat.java
 package com.entreprise.manage.achats.model;
 
+// import com.entreprise.manage.referentiels.model.Article;
 import com.entreprise.manage.core.auth.model.Utilisateur;
 import com.entreprise.manage.referentiels.model.Site;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,19 +20,19 @@ public class DemandeAchat {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "reference", unique = true, nullable = false)
     private String reference;
 
     @ManyToOne
-    @JoinColumn(name = "demandeur_id")
+    @JoinColumn(name = "demandeur_id", nullable = false)
     private Utilisateur demandeur;
 
     @ManyToOne
-    @JoinColumn(name = "site_id")
+    @JoinColumn(name = "site_id", nullable = false)
     private Site site;
 
-    @Column(nullable = false)
-    private String statut; // BROUILLON, SOUMISE, VALIDEE, REJETEE, CONVERTIE_BC
+    @Column(name = "statut", nullable = false)
+    private String statut; // BROUILLON, SOUMISE, VALIDEE, REJETEE, ANNULEE
 
     @Column(name = "montant_total", precision = 15, scale = 2)
     private BigDecimal montantTotal = BigDecimal.ZERO;
@@ -44,24 +47,13 @@ public class DemandeAchat {
     @JoinColumn(name = "valide_par")
     private Utilisateur validePar;
 
-    @Version
-    private Long version;
-
-    @OneToMany(mappedBy = "demandeAchat", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "demandeAchat", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<LigneDemandeAchat> lignes = new ArrayList<>();
 
-    @PrePersist
-    public void prePersist() {
-        this.dateCreation = LocalDateTime.now();
-    }
+    @OneToOne(mappedBy = "demandeAchat")
+    private BonCommande bonCommande;
 
-    public void recalculerTotal() {
-        this.montantTotal = lignes.stream()
-                .map(LigneDemandeAchat::getTotalLigne)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    // Getters / Setters
+    // Getters et Setters
     public Long getId() {
         return id;
     }
@@ -134,19 +126,32 @@ public class DemandeAchat {
         this.validePar = validePar;
     }
 
-    public Long getVersion() {
-        return version;
-    }
-
-    public void setVersion(Long version) {
-        this.version = version;
-    }
-
     public List<LigneDemandeAchat> getLignes() {
         return lignes;
     }
 
     public void setLignes(List<LigneDemandeAchat> lignes) {
         this.lignes = lignes;
+    }
+
+    public BonCommande getBonCommande() {
+        return bonCommande;
+    }
+
+    public void setBonCommande(BonCommande bonCommande) {
+        this.bonCommande = bonCommande;
+    }
+    
+
+    public void calculerMontantTotal() {
+        if (this.lignes == null || this.lignes.isEmpty()) {
+            this.montantTotal = BigDecimal.ZERO;
+            return;
+        }
+        this.montantTotal = this.lignes.stream()
+                .map(LigneDemandeAchat::getTotalLigne)
+                .filter(t -> t != null)
+                .reduce(BigDecimal.ZERO, (a, b) -> a.add(b))
+                .setScale(2, RoundingMode.HALF_UP);
     }
 }
