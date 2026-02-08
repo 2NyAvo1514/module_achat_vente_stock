@@ -119,4 +119,9 @@ public class Article {
     public void setStockMaximum(BigDecimal stockMaximum) {
         this.stockMaximum = stockMaximum;
     }
+
+    // Alias pour compatibilité avec les vues
+    public String getDesignation() {
+        return this.libelle;
+    }
 }
