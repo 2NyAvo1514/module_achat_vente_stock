@@ -273,7 +273,7 @@ INSERT INTO permission(code, libelle, module) VALUES
 ('CORE_ROLE_READ', 'Consulter rôles', 'CORE'),
 ('CORE_ROLE_WRITE', 'Gérer rôles', 'CORE'),
 ('CORE_WORKFLOW_ADMIN', 'Administrer workflows', 'CORE'),
-('CORE_AUDIT_READ', 'Consulter journaux d’audit', 'CORE');
+('CORE_AUDIT_READ', 'Consulter journaux d''audit', 'CORE');  -- Notez les deux apostrophes
 
 -- Rôles → Permissions
 INSERT INTO role_permission(role_id, permission_id)
